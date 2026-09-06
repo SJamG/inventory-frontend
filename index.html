@@ -363,7 +363,7 @@
     <input type="text" id="fName" placeholder="e.g. Electrical" />
 
     <label for="fDescription">Description</label>
-    <textarea id="fDescription" placeholder="What's in here"></textarea>
+    <textarea id="fDescription" placeholder="Notes"></textarea>
 
     <div id="fRoomWrap" style="display:none">
       <label for="fRoom">Room</label>
@@ -650,6 +650,7 @@
       : `New ${tab === "boxes" ? "Box" : "Item"}`;
     fName.value = record ? (record.Name || "") : "";
     fDescription.value = record ? (record.Description || "") : "";
+    fDescription.placeholder = tab === "boxes" ? "What's in here" : "Notes about this item";
 
     fRoomWrap.style.display = tab === "boxes" ? "block" : "none";
     fBoxWrap.style.display = tab === "items" ? "block" : "none";
