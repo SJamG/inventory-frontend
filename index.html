@@ -1001,9 +1001,12 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       let related = [];
       if (tab === "box") {
         const allItems = await apiGet(c.itemsId);
+        // Compare as strings: this NocoDB instance returns the primary key
+        // as a different type from the single-record endpoint than from the
+        // bulk list endpoint (same quirk family as the attachment URL issue).
         related = allItems.filter(it => {
           const link = it[linkFieldName()];
-          return Array.isArray(link) && link.some(l => l.Id === record.Id);
+          return Array.isArray(link) && link.some(l => String(l.Id) === String(record.Id));
         });
       } else {
         const link = record[linkFieldName()];
