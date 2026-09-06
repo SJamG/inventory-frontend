@@ -1,0 +1,15 @@
+# Paste this stack into Dockge.
+# Note: nginx:alpine does not honour PUID/PGID (that's a linuxserver.io
+# convention) - included here only for consistency with the rest of the
+# homelab's compose files; it is a no-op for this image.
+services:
+  inventory-frontend:
+    image: ghcr.io/sjamg/inventory-frontend:latest
+    container_name: inventory-frontend
+    restart: unless-stopped
+    ports:
+      - "8083:80"
+    environment:
+      - PUID=568
+      - PGID=568
+      - TZ=Europe/London
