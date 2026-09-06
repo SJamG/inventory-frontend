@@ -557,9 +557,27 @@
     });
   }
 
+  // Different NocoDB versions return attachment metadata differently:
+  // some give a ready-to-use "url", others only give a relative "path"
+  // and/or a temporary "signedPath" (optionally nested under thumbnails).
+  // This resolves whichever shape is actually present into a full URL.
+  function resolveAttachmentUrl(entry) {
+    if (!entry) return null;
+    if (entry.url) return entry.url;
+    if (entry.signedUrl) return entry.signedUrl;
+    const rel = entry.signedPath || entry.path;
+    if (!rel) return null;
+    if (/^https?:\/\//i.test(rel)) return rel;
+    const base = getConfig().url || "";
+    return `${base}/${rel.replace(/^\//, "")}`;
+  }
+
   function attachmentThumb(field) {
-    if (Array.isArray(field) && field.length && field[0].url) {
-      return `<img class="thumb" src="${field[0].url}" alt="" />`;
+    if (Array.isArray(field) && field.length) {
+      const entry = field[0];
+      const thumbEntry = entry.thumbnails && (entry.thumbnails.small || entry.thumbnails.tiny);
+      const url = resolveAttachmentUrl(thumbEntry) || resolveAttachmentUrl(entry);
+      if (url) return `<img class="thumb" src="${url}" alt="" />`;
     }
     return `<div class="thumb">□</div>`;
   }
@@ -666,7 +684,7 @@
       if (existingBoxId) fBox.value = existingBoxId;
     }
 
-    const existingPhoto = record && Array.isArray(record.Photo) && record.Photo.length ? record.Photo[0].url : null;
+    const existingPhoto = record && Array.isArray(record.Photo) && record.Photo.length ? resolveAttachmentUrl(record.Photo[0]) : null;
     if (existingPhoto) {
       photoPreview.src = existingPhoto;
       photoPreview.style.display = "block";
