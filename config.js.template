@@ -1,0 +1,13 @@
+// Injected at container startup from Dockge's environment variables (see
+// docker-entrypoint.d/40-inject-config.sh and docker-compose.yml).
+// This makes every device that loads the page auto-configure itself,
+// instead of requiring the NocoDB URL/token/table IDs to be typed into
+// Settings on each new device. The Settings panel still works and, if
+// someone saves something there, that device's local override wins.
+window.SERVER_CONFIG = {
+  url: "${NOCODB_URL}",
+  token: "${NOCODB_TOKEN}",
+  boxesId: "${NOCODB_BOXES_ID}",
+  itemsId: "${NOCODB_ITEMS_ID}",
+  linkField: "${NOCODB_LINK_FIELD}"
+};

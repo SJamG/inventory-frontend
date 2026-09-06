@@ -505,6 +505,12 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Injected at container start from Dockge's environment variables (see
+     Dockerfile / docker-compose.yml) so every device auto-configures
+     without typing the NocoDB URL/token/table IDs in on each one. Falls
+     back to empty strings harmlessly if this file is ever missing. -->
+<script src="config.js"></script>
+
 <!-- Vendored QR code generator (davidshimjs/qrcodejs, MIT) — inlined so the
      app has no runtime dependency on any external CDN. -->
 <script>
@@ -521,8 +527,16 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   const DEFAULT_ROOMS = ["Garage", "Loft", "Office"];
 
   function getConfig() {
-    try { return JSON.parse(localStorage.getItem(CONFIG_KEY)) || {}; }
-    catch (e) { return {}; }
+    // Server-injected defaults (config.js, from Dockge env vars) apply to
+    // every device automatically; anything saved in this browser's own
+    // Settings panel overrides them, so a per-device override still works.
+    const serverDefaults = (window.SERVER_CONFIG && typeof window.SERVER_CONFIG === "object") ? window.SERVER_CONFIG : {};
+    let stored = {};
+    try { stored = JSON.parse(localStorage.getItem(CONFIG_KEY)) || {}; }
+    catch (e) { stored = {}; }
+    const merged = { ...serverDefaults };
+    Object.keys(stored).forEach(k => { if (stored[k]) merged[k] = stored[k]; });
+    return merged;
   }
   function setConfig(cfg) {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));

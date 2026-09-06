@@ -13,3 +13,11 @@ services:
       - PUID=568
       - PGID=568
       - TZ=Europe/London
+      # Auto-configures every device that loads the page - no per-device
+      # Settings entry needed. NOCODB_TOKEN is a secret: set it here in
+      # Dockge's own environment editor, never commit a real value to git.
+      - NOCODB_URL=https://db.sjamg.me
+      - NOCODB_TOKEN=REPLACE_WITH_YOUR_NOCODB_API_TOKEN
+      - NOCODB_BOXES_ID=mpd5wmakym5yo04
+      - NOCODB_ITEMS_ID=m83hhqlfdzbozyj
+      - NOCODB_LINK_FIELD=Box
