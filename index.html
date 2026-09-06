@@ -991,19 +991,19 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     dv.innerHTML = `<div class="status-msg">Loading…</div>`;
     try {
       const c = getConfig();
-      const tableId = tab === "box" ? c.boxesId : c.itemsId;
-      const res = await fetch(`${c.url}/api/v2/tables/${tableId}/records/${id}`, {
-        headers: { "xc-token": c.token }
-      });
-      if (!res.ok) throw new Error(`Not found (${res.status})`);
-      const record = await res.json();
+      // Deliberately NOT using the single-record "/records/:id" endpoint here:
+      // on this NocoDB instance it doesn't populate Link fields the way the
+      // bulk list endpoint does (the same one the main list view already
+      // relies on successfully), so a Box's contents / an Item's Box would
+      // come back empty. Fetching both tables' full lists and finding the
+      // record client-side reuses the code path that's already proven to work.
+      const [allBoxes, allItems] = await Promise.all([apiGet(c.boxesId), apiGet(c.itemsId)]);
+      const list = tab === "box" ? allBoxes : allItems;
+      const record = list.find(r => String(r.Id) === String(id));
+      if (!record) throw new Error("Record not found");
 
       let related = [];
       if (tab === "box") {
-        const allItems = await apiGet(c.itemsId);
-        // Compare as strings: this NocoDB instance returns the primary key
-        // as a different type from the single-record endpoint than from the
-        // bulk list endpoint (same quirk family as the attachment URL issue).
         related = allItems.filter(it => {
           const link = it[linkFieldName()];
           return Array.isArray(link) && link.some(l => String(l.Id) === String(record.Id));
