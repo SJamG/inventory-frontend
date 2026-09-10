@@ -670,6 +670,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   let activeTab = "boxes";
   let boxes = [];
   let items = [];
+  let detailContext = null; // { tab: 'box'|'item', id } while viewing a detail page
   let roomFilterValue = "all";
   let editingRecord = null; // { table: 'boxes'|'items', id, ... } when editing
   let pendingPhoto = null; // File selected but not yet uploaded
@@ -761,7 +762,13 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM19 14h2v2h-2zM14 19h2v2h-2zM19 19h2v2h-2z"/></svg>
         </button>
       `;
-      row.addEventListener("click", () => openSheet(activeTab, r));
+      row.addEventListener("click", () => {
+        if (activeTab === "boxes") {
+          location.href = recordUrl("boxes", r.Id);
+        } else {
+          openSheet(activeTab, r);
+        }
+      });
       row.querySelector(".row-qr-btn").addEventListener("click", (e) => {
         e.stopPropagation();
         openQR(activeTab, r);
@@ -935,7 +942,15 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 
       toast(editingRecord ? "Saved" : "Added");
       closeSheet();
-      await loadData();
+      // If we got here from a QR detail page (edited via its Edit button),
+      // refresh that page in place instead of the main list sitting hidden
+      // behind it - otherwise the edit wouldn't show until you navigated away
+      // and back.
+      if (detailContext) {
+        await renderDetailView(detailContext.tab, detailContext.id);
+      } else {
+        await loadData();
+      }
     } catch (e) {
       toast(`Error: ${e.message}`);
     } finally {
@@ -951,7 +966,13 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       await apiDelete(tableIdFor(editingRecord.table), editingRecord.id);
       toast("Deleted");
       closeSheet();
-      await loadData();
+      // The record whose detail page we're on no longer exists - go back
+      // to the main list rather than trying to refresh a page for it.
+      if (detailContext) {
+        location.href = location.pathname;
+      } else {
+        await loadData();
+      }
     } catch (e) {
       toast(`Error: ${e.message}`);
     }
@@ -1022,9 +1043,11 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       // come back empty. Fetching both tables' full lists and finding the
       // record client-side reuses the code path that's already proven to work.
       const [allBoxes, allItems] = await Promise.all([apiGet(c.boxesId), apiGet(c.itemsId)]);
+      boxes = allBoxes; items = allItems; // keep global state in sync so the Edit button's sheet works
       const list = tab === "box" ? allBoxes : allItems;
       const record = list.find(r => String(r.Id) === String(id));
       if (!record) throw new Error("Record not found");
+      detailContext = { tab, id: record.Id };
 
       let related = [];
       if (tab === "box") {
@@ -1055,9 +1078,14 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     dv.innerHTML = `
       <div class="detail-topbar">
         <a class="icon-btn" href="${location.pathname}" aria-label="Back">‹</a>
-        <button class="icon-btn" id="detailQrBtn" aria-label="QR code">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM19 14h2v2h-2zM14 19h2v2h-2zM19 19h2v2h-2z"/></svg>
-        </button>
+        <div style="display:flex; gap:8px;">
+          <button class="icon-btn" id="detailEditBtn" aria-label="Edit">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button class="icon-btn" id="detailQrBtn" aria-label="QR code">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM19 14h2v2h-2zM14 19h2v2h-2zM19 19h2v2h-2z"/></svg>
+          </button>
+        </div>
       </div>
       ${photoUrl ? `<img class="detail-photo" src="${photoUrl}" alt="" />` : ""}
       <div class="detail-body">
@@ -1072,6 +1100,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       </div>
     `;
     document.getElementById("detailQrBtn").addEventListener("click", () => openQR(tab === "box" ? "boxes" : "items", record));
+    document.getElementById("detailEditBtn").addEventListener("click", () => openSheet(tab === "box" ? "boxes" : "items", record));
   }
 
   // ---------- Print labels view ----------
