@@ -63,15 +63,21 @@ no Settings step required.
 ## Printing labels
 
 Settings → **Print QR Labels…** (or `?view=print&type=boxes` /
-`&type=items`) opens an on-screen tool for the Avery L7120-25 sheet
-(nominally 35×35mm, 35 per A4 sheet). Exact margins vary by printer, so:
-1. Tick **Calibration mode** and print a test sheet on plain paper — it
-   prints outlines only, no ink wasted on real QR codes.
-2. Hold the test sheet up to a real label sheet against a light source and
-   nudge the column/row/pitch/margin numbers (in mm) until the outlines
-   line up.
-3. Untick calibration mode and print for real. The numbers you dialled in
-   are remembered (per browser) for next time.
+`&type=items`) opens the label tool for the Avery L7120-25 sheet (35×35mm,
+35 per A4 sheet, 5×7).
+
+Click **Download Word document** to get a `.docx` file laid out with the
+exact geometry from Avery's own official L7120-25 template (table grid +
+page margins, read straight out of its `document.xml`), with one QR code
+per label. Open it in Word/Pages/LibreOffice and print from there — this
+sidesteps browser/CSS print scaling and printer-driver quirks entirely,
+which turned out to be too inconsistent to calibrate reliably from the
+browser's own print dialog. The `.docx` is built entirely client-side (via
+a vendored copy of JSZip) from the current Boxes or Items records; more
+than 35 records automatically spill onto additional sheets/pages.
+
+The old on-screen browser-print/calibration tool is still there under
+**Advanced** as a fallback, but isn't the recommended path any more.
 
 ## Deploying
 
