@@ -674,6 +674,14 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 
   const tableIdFor = (tab) => tab === "boxes" ? getConfig().boxesId : getConfig().itemsId;
   const linkFieldName = () => getConfig().linkField || "Box";
+  // NocoDB returns a link field as an array of {Id,...} OR, for this
+  // instance's Items->Box field, as a single {Id,...} object - normalize
+  // both shapes to an array so callers never have to special-case it.
+  function asLinkArray(link) {
+    if (Array.isArray(link)) return link;
+    if (link && typeof link === "object") return [link];
+    return [];
+  }
 
   // ---------- Rendering ----------
   function renderRoomFilter() {
@@ -737,8 +745,8 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       const metaBits = [`<span class="code-chip mono">${r["Asset Code"] || ""}</span>`];
       if (activeTab === "boxes" && r.Room) metaBits.push(r.Room);
       if (activeTab === "items") {
-        const link = r[linkFieldName()];
-        const boxTitle = Array.isArray(link) && link.length ? link[0].Name : null;
+        const link = asLinkArray(r[linkFieldName()]);
+        const boxTitle = link.length ? link[0].Name : null;
         if (boxTitle) metaBits.push(boxTitle);
       }
       row.innerHTML = `
@@ -846,8 +854,8 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     }
     if (tab === "items") {
       fBox.innerHTML = boxes.map(b => `<option value="${b.Id}">${b.Name}</option>`).join("");
-      const existingLink = record && record[linkFieldName()];
-      const existingBoxId = Array.isArray(existingLink) && existingLink.length ? existingLink[0].Id : null;
+      const existingLink = asLinkArray(record && record[linkFieldName()]);
+      const existingBoxId = existingLink.length ? existingLink[0].Id : null;
       if (existingBoxId) fBox.value = existingBoxId;
     }
 
@@ -1019,12 +1027,11 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       let related = [];
       if (tab === "box") {
         related = allItems.filter(it => {
-          const link = it[linkFieldName()];
-          return Array.isArray(link) && link.some(l => String(l.Id) === String(record.Id));
+          const link = asLinkArray(it[linkFieldName()]);
+          return link.some(l => String(l.Id) === String(record.Id));
         });
       } else {
-        const link = record[linkFieldName()];
-        related = Array.isArray(link) ? link : [];
+        related = asLinkArray(record[linkFieldName()]);
       }
       renderDetailContent(tab, record, related);
     } catch (e) {
