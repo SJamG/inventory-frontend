@@ -380,8 +380,11 @@
   .print-label-code { font-size: 5.5px; color: #333; }
   /* border, not outline: Safari/WebKit has a known bug where outline shows on
      screen and in print preview but silently doesn't render on the actual
-     printed page, which is why calibration sheets were coming out blank. */
-  .print-label-calib { border: 1px dashed #000; }
+     printed page, which is why calibration sheets were coming out blank.
+     Also: solid and specified in mm (not a CSS px hairline) - some laser
+     printers drop a 1px dashed line entirely at the engine/driver level even
+     though it renders fine in every on-screen preview. */
+  .print-label-calib { border: 0.5mm solid #000; }
   @media screen {
     .print-label:not(.print-label-calib) { border: 1px dashed #ccc; }
   }
