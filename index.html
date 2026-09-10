@@ -729,7 +729,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           const recIdx = labelR * AVERY.COLS + labelC;
           const rec = records[recIdx];
           const content = rec ? docxLabelParagraphs(rec.relId, rec.labelOpts) : null;
-          cells.push(docxCellXml(content, width, true));
+          // No cell border: a printed outline would land on every label on
+          // the sheet - used or not - permanently marking the unused ones
+          // (a real print showed exactly this). The physical die-cut label
+          // edge is already there; we don't need to draw one.
+          cells.push(docxCellXml(content, width, false));
         } else {
           cells.push(docxCellXml(null, width, false));
         }
@@ -796,7 +800,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     // (no asset code) - Items keep the smaller QR + name + asset code.
     const isBoxes = type === "boxes";
     const labelOptsFor = (r) => isBoxes
-      ? { sizeMm: 28, nameText: (r.Name || "").slice(0, 24), codeText: "", nameSz: 24, codeSz: 10, beforeTwips: 90 }
+      // beforeTwips adds blank space above the QR inside a vAlign=center
+      // cell, which (because centering then redistributes that space)
+      // shifts the visible content down by *half* of what's added - so
+      // to move the block down ~1mm (57 twips) we add ~115 twips here.
+      ? { sizeMm: 28, nameText: (r.Name || "").slice(0, 24), codeText: "", nameSz: 24, codeSz: 10, beforeTwips: 205 }
       : { sizeMm: 25, nameText: (r.Name || "").slice(0, 24), codeText: r["Asset Code"] || "", nameSz: 12, codeSz: 10, beforeTwips: 140 };
     const labelRecords = records.map((r, i) => ({
       relId: `rIdImg${i + 1}`,
