@@ -662,15 +662,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         '<w:bottom w:val="none" w:sz="0" w:space="0" w:color="auto"/>' +
         '<w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/>' +
         '</w:tcBorders>';
-    const tcPr = `<w:tcPr><w:tcW w:w="${widthDxa}" w:type="dxa"/>${borders}<w:vAlign w:val="center"/></w:tcPr>`;
+    // Explicit zero top/bottom cell margins so vertical centering (vAlign)
+    // is computed from a known baseline rather than whatever a given word
+    // processor's default table style happens to use.
+    const tcMar = '<w:tcMar><w:top w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/></w:tcMar>';
+    const tcPr = `<w:tcPr><w:tcW w:w="${widthDxa}" w:type="dxa"/>${borders}${tcMar}<w:vAlign w:val="center"/></w:tcPr>`;
     const body = contentXml || '<w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:p>';
     return `<w:tc>${tcPr}${body}</w:tc>`;
   }
 
   function docxLabelParagraphs(relId, sizeMm, nameText, codeText) {
     const emu = mmToEmu(sizeMm);
+    // A small amount of space above the QR image, inside the vertically-
+    // centered content block, nudges the visible content down slightly -
+    // on a test print the block as a whole sat a hair closer to the top
+    // of the label than the bottom.
     const drawing =
-      '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>' +
+      '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="140" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>' +
       '<w:r><w:drawing>' +
       '<wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">' +
       `<wp:extent cx="${emu}" cy="${emu}"/>` +
