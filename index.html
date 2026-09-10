@@ -1106,7 +1106,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   // ---------- Print labels view ----------
   const PRINT_CALIB_KEY = "inventory_app_print_calib";
   function getPrintCalib() {
-    const defaults = { cols: 5, rows: 7, labelW: 35, labelH: 35, pitchX: 40, pitchY: 40, marginTop: 8, marginLeft: 8 };
+    const defaults = { cols: 5, rows: 7, labelW: 35, labelH: 35, pitchX: 40, pitchY: 40, marginTop: 11, marginLeft: 7 };
     try { return { ...defaults, ...(JSON.parse(localStorage.getItem(PRINT_CALIB_KEY)) || {}) }; }
     catch (e) { return defaults; }
   }
@@ -1162,8 +1162,8 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
         labelH: parseFloat(document.getElementById("pLabelH").value) || 35,
         pitchX: parseFloat(document.getElementById("pPitchX").value) || 40,
         pitchY: parseFloat(document.getElementById("pPitchY").value) || 40,
-        marginTop: parseFloat(document.getElementById("pMarginTop").value) || 8,
-        marginLeft: parseFloat(document.getElementById("pMarginLeft").value) || 8
+        marginTop: parseFloat(document.getElementById("pMarginTop").value) || 11,
+        marginLeft: parseFloat(document.getElementById("pMarginLeft").value) || 7
       };
       setPrintCalib(newCalib);
       const currentType = document.getElementById("pType").value;
