@@ -1112,7 +1112,10 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   // ---------- Print labels view ----------
   const PRINT_CALIB_KEY = "inventory_app_print_calib";
   function getPrintCalib() {
-    const defaults = { cols: 5, rows: 7, labelW: 35, labelH: 35, pitchX: 40, pitchY: 40, marginTop: 11, marginLeft: 7 };
+    // Values confirmed against Avery's own official Word mail-merge template
+    // for L7120-25 (page margins + table grid dimensions convert exactly to
+    // these mm figures) rather than guessed from a physical calibration print.
+    const defaults = { cols: 5, rows: 7, labelW: 35, labelH: 35, pitchX: 40, pitchY: 40, marginTop: 11, marginLeft: 9.7 };
     try { return { ...defaults, ...(JSON.parse(localStorage.getItem(PRINT_CALIB_KEY)) || {}) }; }
     catch (e) { return defaults; }
   }
@@ -1151,10 +1154,11 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
           <label>Left margin (mm) <input type="text" inputmode="decimal" id="pMarginLeft" value="${calib.marginLeft}"></label>
         </div>
         <label class="print-checkbox"><input type="checkbox" id="pCalibMode"> Calibration mode (outlines only — check alignment on plain paper before using real labels)</label>
-        <p class="print-hint">Avery L7120-25 is nominally 35×35mm, 35 per A4 sheet (5×7), but exact
-          margins vary by printer. Print a calibration sheet on plain paper first, hold it up
-          against a real label sheet to the light, and nudge the numbers above until the
-          outlines line up before printing onto actual labels.</p>
+        <p class="print-hint">Avery L7120-25 is 35×35mm, 35 per A4 sheet (5×7). The numbers above
+          match Avery's own official template, but printers vary slightly in how they handle
+          margins/scaling - print a calibration sheet first and check it against a real label
+          sheet before printing onto actual labels. If your printer has a "Scale to fit paper
+          size" option, make sure it's off; it can distort these measurements.</p>
         <button class="btn-primary" id="pPrintBtn" style="width:auto; padding-left:24px; padding-right:24px;">Print</button>
       </div>
       <div class="print-page" id="printPage"></div>
@@ -1169,7 +1173,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
         pitchX: parseFloat(document.getElementById("pPitchX").value) || 40,
         pitchY: parseFloat(document.getElementById("pPitchY").value) || 40,
         marginTop: parseFloat(document.getElementById("pMarginTop").value) || 11,
-        marginLeft: parseFloat(document.getElementById("pMarginLeft").value) || 7
+        marginLeft: parseFloat(document.getElementById("pMarginLeft").value) || 9.7
       };
       setPrintCalib(newCalib);
       const currentType = document.getElementById("pType").value;
