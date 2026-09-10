@@ -354,10 +354,12 @@
   .detail-desc { color: var(--ink-soft); font-size: 14px; line-height: 1.5; margin: 0 0 24px; white-space: pre-wrap; }
   .detail-section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin: 0 0 8px; }
   .detail-related-row {
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; align-items: center; gap: 12px;
     padding: 12px 0; border-bottom: 1px solid var(--line);
     text-decoration: none; color: var(--ink); font-size: 14px;
   }
+  .detail-related-main { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .detail-related-row .thumb { width: 40px; height: 40px; }
   .detail-empty { color: var(--ink-soft); font-size: 14px; }
 
   /* ---------- Print labels view ---------- */
@@ -1044,7 +1046,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     const photoUrl = record.Photo && record.Photo.length ? resolveAttachmentUrl(record.Photo[0]) : null;
     const relatedHtml = tab === "box"
       ? (related.length
-          ? related.map(it => `<a class="detail-related-row" href="${recordUrl("items", it.Id)}"><span>${it.Name || "(unnamed)"}</span><span class="code-chip mono">${it["Asset Code"] || ""}</span></a>`).join("")
+          ? related.map(it => `<a class="detail-related-row" href="${recordUrl("items", it.Id)}">${attachmentThumb(it.Photo)}<span class="detail-related-main"><span>${it.Name || "(unnamed)"}</span><span class="code-chip mono">${it["Asset Code"] || ""}</span></span></a>`).join("")
           : `<p class="detail-empty">No items logged in this box yet.</p>`)
       : (related.length
           ? `<a class="detail-related-row" href="${recordUrl("boxes", related[0].Id)}"><span>${related[0].Name || "(unnamed)"}</span></a>`
