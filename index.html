@@ -630,13 +630,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   function averyGridColumns() {
+    // 5 label columns at their true 35mm width, 4 gap columns at their true
+    // 5mm width - do NOT shrink any column to force the table to fit inside
+    // (page width - left margin - right margin). The official Avery
+    // template's own table is *wider* than that: it deliberately extends a
+    // little past the nominal right margin (a table's width isn't bound by
+    // the page's right margin the way body text is - only its left edge
+    // is anchored, by the left margin). Forcing a fit here previously
+    // shrank the last column by ~2.5mm, which was fine for a blank cell
+    // but clipped/wrapped real label text placed in that column.
     const cols = [];
     for (let c = 0; c < AVERY.COLS; c++) {
       cols.push(AVERY.LABEL);
       if (c < AVERY.COLS - 1) cols.push(AVERY.GAP);
     }
-    const printableW = AVERY.PAGE_W - AVERY.MARGIN_LEFT - AVERY.MARGIN_RIGHT;
-    cols[cols.length - 1] += printableW - cols.reduce((a, b) => a + b, 0);
     return cols;
   }
   function averyRowHeights() {
@@ -671,14 +678,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return `<w:tc>${tcPr}${body}</w:tc>`;
   }
 
-  function docxLabelParagraphs(relId, sizeMm, nameText, codeText) {
+  function docxLabelParagraphs(relId, opts) {
+    const { sizeMm, nameText, codeText, nameSz, codeSz, beforeTwips } = opts;
     const emu = mmToEmu(sizeMm);
     // A small amount of space above the QR image, inside the vertically-
     // centered content block, nudges the visible content down slightly -
     // on a test print the block as a whole sat a hair closer to the top
     // of the label than the bottom.
     const drawing =
-      '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="140" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>' +
+      `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="${beforeTwips}" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>` +
       '<w:r><w:drawing>' +
       '<wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">' +
       `<wp:extent cx="${emu}" cy="${emu}"/>` +
@@ -696,11 +704,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let text = "";
     if (nameText) {
       text += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="20" w:after="0" w:line="200" w:lineRule="auto"/></w:pPr>' +
-        `<w:r><w:rPr><w:sz w:val="12"/><w:b/></w:rPr><w:t xml:space="preserve">${xmlEscape(nameText)}</w:t></w:r></w:p>`;
+        `<w:r><w:rPr><w:sz w:val="${nameSz}"/><w:b/></w:rPr><w:t xml:space="preserve">${xmlEscape(nameText)}</w:t></w:r></w:p>`;
     }
     if (codeText) {
       text += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0" w:line="200" w:lineRule="auto"/></w:pPr>' +
-        `<w:r><w:rPr><w:sz w:val="10"/></w:rPr><w:t xml:space="preserve">${xmlEscape(codeText)}</w:t></w:r></w:p>`;
+        `<w:r><w:rPr><w:sz w:val="${codeSz}"/></w:rPr><w:t xml:space="preserve">${xmlEscape(codeText)}</w:t></w:r></w:p>`;
     }
     return drawing + text;
   }
@@ -720,7 +728,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           const labelR = r / 2, labelC = c / 2;
           const recIdx = labelR * AVERY.COLS + labelC;
           const rec = records[recIdx];
-          const content = rec ? docxLabelParagraphs(rec.relId, 25, rec.name, rec.code) : null;
+          const content = rec ? docxLabelParagraphs(rec.relId, rec.labelOpts) : null;
           cells.push(docxCellXml(content, width, true));
         } else {
           cells.push(docxCellXml(null, width, false));
@@ -781,20 +789,30 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return dataUrl.split(",")[1];
   }
 
-  async function buildAveryDocx(type) {
+  async function buildAveryDocx(type, startIndex) {
     const tableId = type === "boxes" ? getConfig().boxesId : getConfig().itemsId;
     const records = await apiGet(tableId);
+    // Boxes get a bigger QR code and just the box name, larger, underneath
+    // (no asset code) - Items keep the smaller QR + name + asset code.
+    const isBoxes = type === "boxes";
+    const labelOptsFor = (r) => isBoxes
+      ? { sizeMm: 28, nameText: (r.Name || "").slice(0, 24), codeText: "", nameSz: 24, codeSz: 10, beforeTwips: 90 }
+      : { sizeMm: 25, nameText: (r.Name || "").slice(0, 24), codeText: r["Asset Code"] || "", nameSz: 12, codeSz: 10, beforeTwips: 140 };
     const labelRecords = records.map((r, i) => ({
       relId: `rIdImg${i + 1}`,
-      name: (r.Name || "").slice(0, 24),
-      code: r["Asset Code"] || "",
+      labelOpts: labelOptsFor(r),
       png: qrPngBase64(recordUrl(type, r.Id), 300)
     }));
 
     const perSheet = AVERY.COLS * AVERY.ROWS; // 35
+    // Leading blanks let a partial sheet (labels already used/removed) be
+    // reused - the first `startIndex` grid positions on the first sheet are
+    // left empty and real records start filling in from there.
+    const offset = Math.max(0, Math.min(perSheet - 1, startIndex || 0));
+    const paddedRecords = Array(offset).fill(null).concat(labelRecords);
     const sheets = [];
-    for (let i = 0; i < Math.max(labelRecords.length, 1); i += perSheet) {
-      sheets.push(labelRecords.slice(i, i + perSheet));
+    for (let i = 0; i < Math.max(paddedRecords.length, 1); i += perSheet) {
+      sheets.push(paddedRecords.slice(i, i + perSheet));
     }
     if (sheets.length === 0) sheets.push([]);
 
@@ -1396,6 +1414,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           one QR code per label. Open it and print straight from Word/Pages/LibreOffice — no
           calibration needed, since the word processor's own print pipeline handles the page
           setup.</p>
+        <div class="print-calib-grid">
+          <label>Start at row (1-7)
+            <select id="pStartRow">
+              ${[1, 2, 3, 4, 5, 6, 7].map(n => `<option value="${n}">${n}</option>`).join("")}
+            </select>
+          </label>
+          <label>Start at column (1-5)
+            <select id="pStartCol">
+              ${[1, 2, 3, 4, 5].map(n => `<option value="${n}">${n}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <p class="print-hint">Reusing a sheet that already has some labels used? Set where the
+          first label should go and everything before it is left blank.</p>
         <button class="btn-primary" id="pDocxBtn" style="width:auto; padding-left:24px; padding-right:24px;">Download Word document</button>
         <details style="margin-top:24px;">
           <summary style="cursor:pointer; color:var(--ink-soft); font-size:13px;">Advanced: print straight from the browser instead</summary>
@@ -1433,7 +1465,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       btn.disabled = true;
       btn.textContent = "Building…";
       try {
-        await buildAveryDocx(document.getElementById("pType").value);
+        const startRow = parseInt(document.getElementById("pStartRow").value, 10) || 1;
+        const startCol = parseInt(document.getElementById("pStartCol").value, 10) || 1;
+        const startIndex = (startRow - 1) * AVERY.COLS + (startCol - 1);
+        await buildAveryDocx(document.getElementById("pType").value, startIndex);
         toast("Downloaded");
       } catch (err) {
         toast("Couldn't build document: " + err.message);
