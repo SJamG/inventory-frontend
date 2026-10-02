@@ -394,6 +394,23 @@
     body { background: #fff; }
     @page { size: A4; margin: 0; }
   }
+
+  /* ---------- Import view ---------- */
+  input[type="file"] {
+    display: block;
+    width: 100%;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+  .import-rows { margin-top: 16px; border-top: 1px solid var(--line); }
+  .import-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .import-row input[type="checkbox"] { width: auto; margin-top: 3px; }
+  .import-row-main { flex: 1; min-width: 0; }
+  .import-row-name { font-size: 14px; color: var(--ink); }
+  .import-row-desc { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .import-summary { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 13px; color: var(--ink-soft); }
+  .import-summary button { width: auto; background: none; border: none; color: var(--amber); font-size: 13px; padding: 0; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -420,6 +437,7 @@
 
 <div id="detailView" class="detail-view" hidden></div>
 <div id="printView" class="print-view" hidden></div>
+<div id="importView" class="print-view" hidden></div>
 
 <button class="fab" id="fabBtn" aria-label="Add">+</button>
 
@@ -508,6 +526,7 @@
     </div>
     <button class="btn-primary" id="settingsSave">Save Settings</button>
     <a class="btn-secondary" style="display:block; text-align:center; margin-top:12px; text-decoration:none;" href="?view=print&type=boxes">Print QR Labels…</a>
+    <a class="btn-secondary" style="display:block; text-align:center; margin-top:10px; text-decoration:none;" href="?view=import">Import from LetsTrack export…</a>
   </div>
 </div>
 
@@ -1555,6 +1574,273 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     rebuild();
   }
 
+  // ---------- Import from LetsTrack export ----------
+  // LetsTrack's own export (xlsx) for one box's tag is a flat sheet: a
+  // header row (Name, Qty, Unit, Date, Description) then one row per item.
+  // We only need the items table here, so the xlsx is parsed entirely
+  // client-side (it's just a zip of simple XML - JSZip is already vendored
+  // for the docx builder above) rather than pulling in a full spreadsheet
+  // library. No backend/server step is involved at all.
+  const SS_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+
+  function xlsxColToIndex(ref) {
+    const m = /^([A-Z]+)/.exec(ref || "");
+    if (!m) return null;
+    let col = 0;
+    for (const ch of m[1]) col = col * 26 + (ch.charCodeAt(0) - 64);
+    return col - 1;
+  }
+
+  function parseSheetXmlRows(xmlText, sharedStrings) {
+    const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+    if (doc.getElementsByTagName("parsererror").length) {
+      throw new Error("Couldn't read that spreadsheet - is it a valid .xlsx file?");
+    }
+    const rowEls = Array.from(doc.getElementsByTagNameNS(SS_NS, "row"));
+    return rowEls.map(rowEl => {
+      const row = [];
+      let autoIdx = 0;
+      Array.from(rowEl.getElementsByTagNameNS(SS_NS, "c")).forEach(c => {
+        const ref = c.getAttribute("r");
+        const idx = ref && xlsxColToIndex(ref) !== null ? xlsxColToIndex(ref) : autoIdx;
+        autoIdx = idx + 1;
+        const type = c.getAttribute("t");
+        let value = "";
+        if (type === "s") {
+          const vEl = c.getElementsByTagNameNS(SS_NS, "v")[0];
+          const ssIdx = vEl ? parseInt(vEl.textContent, 10) : NaN;
+          value = sharedStrings[ssIdx] || "";
+        } else if (type === "inlineStr") {
+          const isEl = c.getElementsByTagNameNS(SS_NS, "is")[0];
+          value = isEl ? Array.from(isEl.getElementsByTagNameNS(SS_NS, "t")).map(t => t.textContent).join("") : "";
+        } else {
+          const vEl = c.getElementsByTagNameNS(SS_NS, "v")[0];
+          value = vEl ? vEl.textContent : "";
+        }
+        row[idx] = value;
+      });
+      return row;
+    });
+  }
+
+  function sheetRowsToObjects(rows) {
+    if (!rows.length) return [];
+    const header = rows[0].map(h => (h || "").toString().trim());
+    return rows.slice(1).map(r => {
+      const obj = {};
+      header.forEach((h, i) => {
+        if (h) obj[h] = (r[i] !== undefined && r[i] !== null) ? r[i].toString().trim() : "";
+      });
+      return obj;
+    }).filter(obj => Object.values(obj).some(v => v));
+  }
+
+  async function parseLetsTrackXlsx(file) {
+    const buf = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(buf);
+    const sheetPath = Object.keys(zip.files).find(f => /xl\/worksheets\/sheet\d*\.xml$/i.test(f));
+    if (!sheetPath) throw new Error("Couldn't find a worksheet inside that file - is it a LetsTrack .xlsx export?");
+    let sharedStrings = [];
+    const ssFile = zip.file("xl/sharedStrings.xml");
+    if (ssFile) {
+      const ssDoc = new DOMParser().parseFromString(await ssFile.async("string"), "application/xml");
+      sharedStrings = Array.from(ssDoc.getElementsByTagNameNS(SS_NS, "si")).map(si =>
+        Array.from(si.getElementsByTagNameNS(SS_NS, "t")).map(t => t.textContent).join("")
+      );
+    }
+    const rows = parseSheetXmlRows(await zip.file(sheetPath).async("string"), sharedStrings);
+    const objects = sheetRowsToObjects(rows);
+
+    // Column names vary a little between LetsTrack's export options, so
+    // match loosely rather than requiring an exact header.
+    const pick = (obj, names) => {
+      for (const n of names) {
+        const key = Object.keys(obj).find(k => k.toLowerCase() === n);
+        if (key && obj[key]) return obj[key];
+      }
+      return "";
+    };
+    const cleanQty = (q) => {
+      const n = parseFloat(q);
+      return isNaN(n) ? q.trim() : String(n);
+    };
+
+    return objects.map(obj => {
+      const name = pick(obj, ["name", "product", "item"]);
+      const qty = cleanQty(pick(obj, ["qty", "quantity"]));
+      const unit = pick(obj, ["unit"]);
+      const rawDescription = pick(obj, ["description"]);
+      const qtyPart = (qty && qty !== "1") ? `Qty: ${qty}${unit ? " " + unit : ""}` : "";
+      const description = [qtyPart, rawDescription].filter(Boolean).join(" — ");
+      return { name, description, include: !!name };
+    }).filter(row => row.name);
+  }
+
+  async function initImportView() {
+    document.querySelector(".app").hidden = true;
+    document.getElementById("fabBtn").hidden = true;
+    const iv = document.getElementById("importView");
+    iv.hidden = false;
+
+    if (!configReady()) {
+      iv.innerHTML = `<div class="status-msg">This device isn't connected to NocoDB yet. <a href="${location.pathname}">Go back</a> and set up Settings first.</div>`;
+      return;
+    }
+
+    let allBoxes = [];
+    try {
+      allBoxes = await apiGet(getConfig().boxesId);
+    } catch (e) {
+      iv.innerHTML = `<div class="status-msg">Couldn't load your boxes: ${e.message}</div>`;
+      return;
+    }
+
+    let parsedRows = [];
+
+    iv.innerHTML = `
+      <div class="print-controls no-print">
+        <a class="icon-btn" href="${location.pathname}" aria-label="Back">‹ Back</a>
+        <h2>Import from LetsTrack</h2>
+        <p class="print-hint">Upload the .xlsx export LetsTrack gives you for one box's tag, choose which box these
+          items belong to, then review the list before importing. Importing the same file twice will add duplicate
+          items - there's no existing-item matching here.</p>
+        <label>Import into
+          <select id="impBoxSelect">
+            <option value="__new__">+ Create a new box…</option>
+            ${allBoxes.map(b => `<option value="${b.Id}">${b.Name}</option>`).join("")}
+          </select>
+        </label>
+        <div id="impNewBoxFields" hidden>
+          <label>New box name <input type="text" id="impNewBoxName" placeholder="e.g. Electrical"></label>
+          <label>Room
+            <select id="impNewBoxRoom">${DEFAULT_ROOMS.map(r => `<option value="${r}">${r}</option>`).join("")}</select>
+          </label>
+        </div>
+        <label>LetsTrack export file (.xlsx)
+          <input type="file" id="impFile" accept=".xlsx">
+        </label>
+        <div id="impPreviewWrap"></div>
+        <button class="btn-primary" id="impImportBtn" style="width:auto; padding-left:24px; padding-right:24px; margin-top:16px;" disabled>Import</button>
+      </div>
+    `;
+
+    const boxSelect = document.getElementById("impBoxSelect");
+    const newBoxFields = document.getElementById("impNewBoxFields");
+    const importBtn = document.getElementById("impImportBtn");
+    const previewWrap = document.getElementById("impPreviewWrap");
+
+    function updateImportBtnState() {
+      const haveRows = parsedRows.some(r => r.include);
+      const haveTarget = boxSelect.value !== "__new__" || document.getElementById("impNewBoxName").value.trim();
+      importBtn.disabled = !(haveRows && haveTarget);
+    }
+
+    newBoxFields.hidden = boxSelect.value !== "__new__";
+    boxSelect.addEventListener("change", () => {
+      newBoxFields.hidden = boxSelect.value !== "__new__";
+      updateImportBtnState();
+    });
+    newBoxFields.addEventListener("input", updateImportBtnState);
+
+    function renderPreview() {
+      if (!parsedRows.length) { previewWrap.innerHTML = ""; return; }
+      const selectedCount = parsedRows.filter(r => r.include).length;
+      previewWrap.innerHTML = `
+        <div class="import-summary">
+          <span>${selectedCount} of ${parsedRows.length} items selected</span>
+          <button type="button" id="impToggleAll">${selectedCount === parsedRows.length ? "Deselect all" : "Select all"}</button>
+        </div>
+        <div class="import-rows">
+          ${parsedRows.map((r, i) => `
+            <label class="import-row">
+              <input type="checkbox" data-idx="${i}" ${r.include ? "checked" : ""}>
+              <div class="import-row-main">
+                <div class="import-row-name">${r.name}</div>
+                ${r.description ? `<div class="import-row-desc">${r.description}</div>` : ""}
+              </div>
+            </label>
+          `).join("")}
+        </div>
+      `;
+      previewWrap.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener("change", () => {
+          parsedRows[parseInt(cb.dataset.idx, 10)].include = cb.checked;
+          renderPreview();
+          updateImportBtnState();
+        });
+      });
+      document.getElementById("impToggleAll").addEventListener("click", () => {
+        const allSelected = parsedRows.every(r => r.include);
+        parsedRows.forEach(r => { r.include = !allSelected; });
+        renderPreview();
+        updateImportBtnState();
+      });
+    }
+
+    document.getElementById("impFile").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      previewWrap.innerHTML = `<p class="print-hint">Reading file…</p>`;
+      try {
+        parsedRows = await parseLetsTrackXlsx(file);
+        if (!parsedRows.length) {
+          previewWrap.innerHTML = `<p class="print-hint">No items found in that file.</p>`;
+        } else {
+          renderPreview();
+        }
+      } catch (err) {
+        parsedRows = [];
+        previewWrap.innerHTML = `<p class="print-hint">${err.message}</p>`;
+      }
+      updateImportBtnState();
+    });
+
+    importBtn.addEventListener("click", async () => {
+      const toImport = parsedRows.filter(r => r.include);
+      if (!toImport.length) return;
+      importBtn.disabled = true;
+      const originalLabel = importBtn.textContent;
+      try {
+        let targetBoxId, targetBoxName;
+        if (boxSelect.value === "__new__") {
+          const name = document.getElementById("impNewBoxName").value.trim();
+          if (!name) { toast("Enter a name for the new box"); return; }
+          const room = document.getElementById("impNewBoxRoom").value;
+          const created = await apiCreate(getConfig().boxesId, { Name: name, Description: "", Room: room });
+          targetBoxId = created.Id || created.id;
+          targetBoxName = name;
+        } else {
+          targetBoxId = parseInt(boxSelect.value, 10);
+          targetBoxName = (allBoxes.find(b => b.Id === targetBoxId) || {}).Name || "box";
+        }
+
+        let done = 0, failed = 0;
+        for (const row of toImport) {
+          importBtn.textContent = `Importing ${done + 1} of ${toImport.length}…`;
+          try {
+            await apiCreate(getConfig().itemsId, {
+              Name: row.name,
+              Description: row.description,
+              [linkFieldName()]: [{ Id: targetBoxId }]
+            });
+            done++;
+          } catch (e) {
+            failed++;
+          }
+        }
+
+        toast(failed ? `Imported ${done} items (${failed} failed) into ${targetBoxName}` : `Imported ${done} items into ${targetBoxName}`);
+        location.href = recordUrl("boxes", targetBoxId);
+      } catch (e) {
+        toast(`Import failed: ${e.message}`);
+        importBtn.disabled = false;
+        importBtn.textContent = originalLabel;
+      }
+    });
+
+    updateImportBtnState();
+  }
+
   // ---------- Init / routing ----------
   const routeParams = new URLSearchParams(location.search);
   const routedView = routeParams.get("view");
@@ -1562,6 +1848,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     renderDetailView(routedView, routeParams.get("id"));
   } else if (routedView === "print") {
     initPrintView(routeParams.get("type") || "boxes");
+  } else if (routedView === "import") {
+    initImportView();
   } else {
     renderRoomFilter();
     loadData();

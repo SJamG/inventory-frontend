@@ -79,6 +79,24 @@ than 35 records automatically spill onto additional sheets/pages.
 The old on-screen browser-print/calibration tool is still there under
 **Advanced** as a fallback, but isn't the recommended path any more.
 
+## Importing from LetsTrack
+
+Settings → **Import from LetsTrack export…** (or `?view=import`) migrates a
+box's contents from the old LetsTrack app. In LetsTrack, export a tag's
+contents as a `.xlsx` file, then on this page:
+
+1. Pick which box the items belong to (or create a new one on the spot).
+2. Choose the `.xlsx` file. It's parsed entirely in the browser (no
+   NocoDB/server round-trip for the parsing itself) and shown as a
+   checklist - name plus a short description built from LetsTrack's
+   quantity/unit/description columns - so anything you don't want can be
+   unticked before importing.
+3. Click **Import**. Each ticked row becomes an Item linked to the chosen
+   box.
+
+There's no duplicate detection, so importing the same export twice adds
+everything twice - re-run it only once per box.
+
 ## Deploying
 
 1. **Push to GitHub** — this repo should live at `github.com/SJamG/inventory-frontend`
